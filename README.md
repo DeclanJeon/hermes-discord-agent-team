@@ -1,6 +1,6 @@
 # Hermes Agent × Discord 멀티 에이전트 팀 셋업 가이드
 
-## 조직 구조 (v1.3.0 — agency-agents 기반)
+## 조직 구조 (v1.4.0 — agency-agents 기반)
 
 ```
            CEO (퍼실리테이터 + 전략)
@@ -125,6 +125,12 @@ CEO: 요청 분석 → 태스크 그래프 작성
 ```
 
 ## 변경 이력
+
+### v1.4.0
+- **CEO 워커 룰**: 간단한 작업(단일 함수, 설정 변경, 30분 이내)은 CEO가 직접 수행, 복잡한 작업만 팀에 위임. Core Rule #1 수정, TFT 구성 조건에 간단한 작업 예외 추가
+- **Discord 자동 구독**: dispatcher가 태스크를 spawn할 때 `kanban_notify_subs`에 assignee 채널 구독 자동 등록. CEO config에 `kanban.notify_channels` (profile→channel_id 매핑) 설정
+- **gateway/run.py Patch C**: `_tick_once_for_board` spawn 후 auto-subscribe 코드 삽입 (`_kanban_notify_channels` 캐싱, `add_notify_sub` 자동 호출)
+- **HERMES_HOME 경로 호환**: 프로필 스코프(`~/.hermes/profiles/ceo`)와 루트(`~/.hermes`) 모두에서 config.yaml 탐색
 
 ### v1.3.0
 - **SQLite WAL 경쟁 패치**: `kanban_db.py`의 `release_stale_claims`에 트랜지언트 disk I/O 에러 핸들링 추가, `gateway/run.py`의 dispatcher가 WAL 경쟁 시 보드를 비활성화하지 않고 재시도하도록 변경 (`_consecutive_db_errors` 카운터 도입)

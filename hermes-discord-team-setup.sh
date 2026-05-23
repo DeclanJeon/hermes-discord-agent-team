@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ============================================================================
 #  Hermes Agent × Discord 멀티 에이전트 팀 원클릭 셋업 스크립트
-#  버전: 1.3.0
+#  버전: 1.4.0
 #  대상: Hermes Agent v0.14+ / Linux & macOS
 # ============================================================================
 #
@@ -28,6 +28,11 @@
 #         /    \
 #       Dev    QA
 #
+#  v1.4.0 변경사항:
+#    - CEO 워커 룰: 간단한 작업은 직접 수행, 복잡한 작업만 팀 위임
+#    - Discord 자동 구독: dispatcher spawn 시 assignee 채널에 notify_sub 자동 등록
+#    - CEO config에 kanban.notify_channels 설정 추가
+#    - gateway/run.py 자동 구독 패치 (Patch C)
 #  v1.3.0 변경사항:
 #    - SQLite WAL 경쟁 패치 (kanban_db.py + gateway/run.py)
 #    - WAL 체크포인트 자동화 (5분마다)
@@ -79,7 +84,7 @@ PROFILES=("ceo" "cto" "pm" "swa" "devlead" "dev" "qa")
 cat << 'BANNER'
 ╔══════════════════════════════════════════════════════════════════════╗
 ║                                                                    ║
-║   🤖  Hermes Agent × Discord 멀티 에이전트 팀 셋업 v1.3.0        ║
+║   🤖  Hermes Agent × Discord 멀티 에이전트 팀 셋업 v1.4.0        ║
 ║                                                                    ║
 ║            CEO (퍼실리테이터 + 전략)                               ║
 ║           /   \                                                    ║
@@ -293,7 +298,7 @@ You are the CEO Agent — the orchestrator, facilitator, and strategic leader of
 
 **TFT는 선택이 아닌 필수** — TFT 구성은 선택이 아닌 필수입니다. 다음 상황에서는 반드시 TFT를 구성해야 합니다:
 
-- **모든 프로젝트 시작 시**: CTO + PM + SWA를 모어 기술 전략과 일정을 논의하는 **킥오프 TFT**를 개최합니다 (TFT는 선택이 아닌 필수)
+- **모든 복잡한 프로젝트 시작 시**: CTO + PM + SWA를 모아 기술 전략과 일정을 논의하는 **킥오프 TFT**를 개최합니다 (간단한 작업은 제외)
 - **아키텍처 결정 시**: CTO + SWA + DevLead로 **기술 TFT**를 구성합니다
 - **일정/리소스 트레이드오프**: CTO + PM + DevLead로 **우선순위 TFT**를 구성합니다
 - **디자인-개발 핸드오프**: SWA + DevLead + Dev로 **인터페이스 TFT**를 구성합니다
@@ -341,20 +346,23 @@ You are the CEO Agent — the orchestrator, facilitator, and strategic leader of
 
 ## Core Rules
 
-1. **직접 구현하지 않습니다** — 반드시 팀원에게 위임합니다
+1. **간단한 작업은 직접 수행, 복잡한 작업은 팀에 위임** — 아래 기준에 따라 판단합니다:
+   - **CEO 직접 수행**: 단일 함수/엔드포인트, 설정 변경, 간단한 스크립트, 30분 이내 완료 가능한 작업
+   - **팀 위임**: 아키텍처 설계 필요, 다수 모듈 연동, 팀 간 의존성 존재, 보안/인증 관련, 1일+ 소요 예상
+   - CEO가 직접 수행해도 작업 완료 후 #작업현황에 결과를 보고합니다
 2. **작업 그래프를 먼저 스케치** → Kanban 태스크 생성 전에 전체 구조를 시각화합니다
-3. **모든 프로젝트에 킥오프 TFT가 필요** — CTO와 PM을 반드시 포함하여 기술 전략과 일정을 먼저 논의합니다
-4. **TFT 없이 바로 실행하지 않습니다** — 중요한 결정은 반드시 토론을 거쳐야 합니다
+3. **복잡한 프로젝트에 킥오프 TFT가 필요** — CTO와 PM을 반드시 포함하여 기술 전략과 일정을 먼저 논의합니다. 간단한 작업은 TFT 없이 즉시 실행합니다
+4. **TFT 없이 바로 실행하지 않습니다** — 단, 간단한 작업(위 기준)은 예외
 5. **토론 → 결정 → 실행**: 의견이 다르면 토론으로 근거를 모으고, 결정 프레임워크로 판단합니다
 6. **차단 시 새 태스크**: QA가 리뷰를 차단하면 새로운 수정 태스크를 만듭니다 (같은 태스크 재실행 금지)
 7. **팀 동적 조정**: 필요하면 팀을 늘리고, 완료되면 줄입니다
 8. **진행 상황 투명화**: #작업현황에 진행, 병목, 완료를 명확히 보고합니다
 9. **CTO와 PM은 선택이 아닌 필수 참여** — 기술적 결정에 CTO, 일정/리소스에 PM을 빠뜨리지 않습니다
-10. **TFT는 선택이 아닌 필수** — 모든 중요 결정은 TFT를 통해서만 이루어지며, 킥오프 시 CTO+PM+SWA 참여는 의무입니다
+10. **TFT는 복잡한 작업에 필수** — 모든 중요 결정은 TFT를 통해서만 이루어지며, 킥오프 시 CTO+PM+SWA 참여는 의무입니다. 간단한 작업은 즉시 실행합니다
 
 ## 작업 분해 체크리스트
 
-태스크를 분해할 때 반드시 다음을 확인합니다:
+**복잡한 작업(팀 위임)**을 분해할 때 반드시 다음을 확인합니다. 간단한 작업은 이 체크리스트를 건너뛰고 즉시 실행합니다:
 - [ ] CTO에게 기술 전략 검토를 요청했는가?
 - [ ] PM에게 일정과 리소스 계획을 요청했는가?
 - [ ] 아키텍처 결정이 필요한가? → TFT 구성 (CTO + SWA + DevLead)
@@ -366,7 +374,8 @@ You are the CEO Agent — the orchestrator, facilitator, and strategic leader of
 ## TFT (Task Force Team) 운영 프로토콜
 
 ### TFT 구성 조건
-- **모든 프로젝트 시작 시 (킥오프)**: CTO + PM + SWA (TFT는 선택이 아닌 필수)
+- **간단한 작업은 TFT 불필요** — 단일 함수, 설정 변경, 30분 이내 작업은 CEO가 직접 수행
+- **모든 복잡한 프로젝트 시작 시 (킥오프)**: CTO + PM + SWA
 - 아키텍처 결정: CTO + SWA + DevLead
 - 기술 vs 일정 트레이드오프: CTO + PM + DevLead
 - 디자인-개발 핸드오프: SWA + DevLead + Dev
@@ -1168,6 +1177,36 @@ configure_discord "dev" "$DEV_CH" "$DEV_ALLOWED"
 QA_ALLOWED="${QA_CH},${DEV_CH},${TFT_CH},${STATUS_CH}"
 configure_discord "qa" "$QA_CH" "$QA_ALLOWED"
 
+# ── Discord 자동 구독 (notify_channels) 설정 ──────────────────────────────────
+info "CEO 프로필에 kanban notify_channels 설정 중..."
+CEO_CONFIG="${HERMES_HOME}/profiles/ceo/config.yaml"
+python3 << PYEOF
+import yaml
+
+cfg_path = "$CEO_CONFIG"
+with open(cfg_path, "r") as f:
+    cfg = yaml.safe_load(f)
+
+if "kanban" not in cfg:
+    cfg["kanban"] = {}
+
+cfg["kanban"]["notify_channels"] = {
+    "ceo": "$CEO_REQ_CH",
+    "cto": "$CTO_CH",
+    "pm": "$PM_CH",
+    "swa": "$SWA_CH",
+    "devlead": "$DEVLEAD_CH",
+    "dev": "$DEV_CH",
+    "qa": "$QA_CH",
+}
+
+with open(cfg_path, "w") as f:
+    yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True)
+
+print(f"notify_channels: {len(cfg['kanban']['notify_channels'])} channels configured")
+PYEOF
+success "CEO kanban notify_channels 설정 완료 (7 채널)"
+
 success "모든 프로필 채널 매핑 완료"
 
 # ── Kanban 보드 초기화 ─────────────────────────────────────────────────────
@@ -1202,7 +1241,7 @@ with open(src, "r") as f:
     content = f.read()
 
 # 백업
-shutil.copy2(src, src + ".bak-v1.3.0")
+shutil.copy2(src, src + ".bak-v1.4.0")
 
 # Patch: replace bare result.reclaimed = release_stale_claims(conn)
 # with try/except for transient disk I/O errors
@@ -1258,7 +1297,7 @@ with open(src, 'r') as f:
     content = f.read()
 
 # 백업
-shutil.copy2(src, src + '.bak-v1.3.0')
+shutil.copy2(src, src + '.bak-v1.4.0')
 
 patched = False
 
@@ -1389,6 +1428,117 @@ else:
     success "gateway/run.py WAL 패치 적용 완료"
 else
     warn "gateway/run.py를 찾을 수 없음 — 스킵 (수동 패치 필요)"
+fi
+
+# ── Patch C — gateway/run.py: dispatcher 자동 구독 (notify_channels) ─────
+info "gateway/run.py Patch C (자동 구독) 적용 중..."
+
+if [ -f "$GATEWAY_RUN" ]; then
+    python3 << PATCHC
+import re, sys
+
+src = "$GATEWAY_RUN"
+with open(src, 'r') as f:
+    content = f.read()
+
+patched = False
+
+# Patch C: dispatcher spawn 후 자동 구독 코드 삽입
+# 대상: "kanban dispatcher [%s]: spawned=%d" 로그 직후
+marker = '                            res.promoted,'
+if marker in content and 'kanban auto-subscribe' not in content:
+    auto_sub_code = '''
+                        # Auto-subscribe spawned tasks to Discord channels
+                        # so terminal events (done/blocked/crashed) are
+                        # delivered to the assignee's channel.
+                        _notify_channels = getattr(self, "_kanban_notify_channels", None)
+                        if _notify_channels is None:
+                            try:
+                                import pathlib as _pl, yaml as _yaml
+                                _home = _pl.Path(
+                                    os.environ.get("HERMES_HOME",
+                                    str(_pl.Path.home() / ".hermes"))
+                                )
+                                _profile = (
+                                    getattr(self, "_kanban_notifier_profile", None)
+                                    or self._active_profile_name()
+                                )
+                                # HERMES_HOME can be either the root (~/.hermes)
+                                # or a profile-scoped override (~/.hermes/profiles/ceo).
+                                # Try the profile-scoped path first (direct child),
+                                # then fall back to root/profiles/<name>/.
+                                _cfg = _home / "config.yaml"
+                                if not _cfg.exists():
+                                    _cfg = _home / "profiles" / _profile / "config.yaml"
+                                if _cfg.exists():
+                                    with open(_cfg) as _f:
+                                        _pc = _yaml.safe_load(_f) or {}
+                                    _notify_channels = (_pc.get("kanban", {}) or {}).get(
+                                        "notify_channels", {}
+                                    )
+                                    logger.info(
+                                        "kanban auto-subscribe: loaded %d notify_channels from %s",
+                                        len(_notify_channels), _cfg,
+                                    )
+                                if not _notify_channels:
+                                    _notify_channels = {}
+                            except Exception as _exc:
+                                logger.debug("kanban auto-subscribe config load failed: %s", _exc)
+                                _notify_channels = {}
+                            self._kanban_notify_channels = _notify_channels
+                        if _notify_channels:
+                            def _auto_subscribe(
+                                spawned_tasks, board_slug, channels
+                            ):
+                                from hermes_cli import kanban_db as _kbsub
+                                try:
+                                    conn = _kbsub.connect(board=board_slug)
+                                    try:
+                                        for task_id, assignee, _ws in spawned_tasks:
+                                            ch = channels.get(assignee)
+                                            if ch:
+                                                _kbsub.add_notify_sub(
+                                                    conn,
+                                                    task_id=task_id,
+                                                    platform="discord",
+                                                    chat_id=ch,
+                                                    notifier_profile=getattr(
+                                                        self,
+                                                        "_kanban_notifier_profile",
+                                                        None,
+                                                    )
+                                                    or self._active_profile_name(),
+                                                )
+                                    finally:
+                                        conn.close()
+                                except Exception as exc:
+                                    logger.debug(
+                                        "kanban auto-subscribe failed: %s", exc
+                                    )
+
+                            await asyncio.to_thread(
+                                _auto_subscribe, res.spawned, slug, _notify_channels
+                            )
+'''
+    # 마지막 promoted 라인 다음에 삽입
+    idx = content.find(marker)
+    if idx != -1:
+        # 해당 마커가 포함된 줄 끝을 찾아서 그 다음에 삽입
+        end_of_line = content.find('\n', idx)
+        if end_of_line != -1:
+            content = content[:end_of_line+1] + auto_sub_code + content[end_of_line+1:]
+            patched = True
+
+    if patched:
+        with open(src, 'w') as f:
+            f.write(content)
+        print('gateway/run.py: Patch C (auto-subscribe) applied')
+    else:
+        print('gateway/run.py: Patch C target not found or already applied')
+PATCHC
+    success "gateway/run.py Patch C (자동 구독) 적용 완료"
+else
+    warn "gateway/run.py를 찾을 수 없음 — Patch C 스킵"
 fi
 
 # ── WAL 체크포인트 자동화 ─────────────────────────────────────────────────
