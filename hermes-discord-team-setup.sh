@@ -358,7 +358,35 @@ You are the CEO Agent — the orchestrator, facilitator, and strategic leader of
 7. **팀 동적 조정**: 필요하면 팀을 늘리고, 완료되면 줄입니다
 8. **진행 상황 투명화**: #작업현황에 진행, 병목, 완료를 명확히 보고합니다
 9. **CTO와 PM은 선택이 아닌 필수 참여** — 기술적 결정에 CTO, 일정/리소스에 PM을 빠뜨리지 않습니다
-10. **TFT는 복잡한 작업에 필수** — 모든 중요 결정은 TFT를 통해서만 이루어지며, 킥오프 시 CTO+PM+SWA 참여는 의무입니다. 간단한 작업은 즉시 실행합니다
+10. **코드 작업은 worktree로 격리** — 병렬 개발 시 파일 충돌을 방지하기 위해 태스크 생성 시 \`--workspace worktree --branch wt/<task-id>\`를 지정합니다
+
+## Workspace 전략
+
+태스크 생성 시 작업 성격에 따라 workspace_kind를 지정합니다:
+
+| 작업 유형 | workspace_kind | 설명 |
+|-----------|---------------|------|
+| 조사/설계/문서 (코드 변경 없음) | \`scratch\` (기본값) | 독립 임시 디렉토리, 작업 완료 후 GC |
+| 단일 파일 설정 변경 | \`scratch\` | CEO가 직접 수행, 브랜치 불필요 |
+| 코드 구현 (Dev, DevLead) | \`worktree\` | git worktree로 격리, 브랜치 자동 생성 |
+| 코드 리뷰 (QA) | \`worktree\` | 리뷰 대상 브랜치 체크아웃 |
+
+**worktree 태스크 생성 예시:**
+\`\`\`
+kanban_create(
+    title="[Dev] 상품 CRUD API 구현",
+    assignee="dev",
+    workspace="worktree",
+    branch="feat/product-crud",
+)
+\`\`\`
+
+**worktree 워크플로우:**
+1. CEO가 태스크 생성 시 \`--workspace worktree --branch <이름>\` 지정
+2. Worker가 시작 시 \`git worktree add <경로> <브랜치>\` 실행 (kanban-worker skill 자동 가이드)
+3. 작업 완료 후 commit + push
+4. DevLead가 리뷰 후 main에 merge
+5. worktree 정리 (\`git worktree remove\`)
 
 ## 작업 분해 체크리스트
 
@@ -370,6 +398,7 @@ You are the CEO Agent — the orchestrator, facilitator, and strategic leader of
 - [ ] #tft-토론에 토론 세션을 게시했는가?
 - [ ] 각 하위 태스크에 적절한 담당자와 의존성을 설정했는가?
 - [ ] QA 검수 태스크를 마지막에 포함했는가?
+- [ ] 코드 작업 태스크에 `--workspace worktree --branch <이름>`을 지정했는가?
 
 ## TFT (Task Force Team) 운영 프로토콜
 
@@ -1222,6 +1251,17 @@ fi
 
 $HERMES_CMD kanban boards switch agent-team 2>&1
 success "agent-team 보드 활성화"
+
+# ── Worktree 기본 workdir 설정 ──────────────────────────────────────────────
+# 프로젝트 저장소 경로를 보드의 default_workdir로 설정
+# 이렇게 하면 worktree 태스크가 이 저장소 기준으로 격리됨
+PROJECT_REPO="${HOME}/Documents/hermes-discord-agent-team"
+if [ -d "$PROJECT_REPO/.git" ]; then
+    $HERMES_CMD kanban boards set-default-workdir agent-team "$PROJECT_REPO" 2>&1
+    success "agent-team 보드 default_workdir → ${PROJECT_REPO}"
+else
+    warn "프로젝트 저장소 ${PROJECT_REPO} 가 없음 — worktree 미설정 (나중에 수동 설정)"
+fi
 
 # ── SQLite WAL 경쟁 패치 ───────────────────────────────────────────────────
 step 11 "SQLite WAL 경쟁 패치"
