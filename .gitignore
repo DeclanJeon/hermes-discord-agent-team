@@ -32,6 +32,10 @@ Thumbs.db
 *.swp
 *.swo
 
+# Test artifacts
+test_products.db
+products.db
+
 # Hermes workspace artifacts
 workspaces/
 sessions/

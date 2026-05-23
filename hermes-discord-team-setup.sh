@@ -128,19 +128,8 @@ if ! command -v python3 &>/dev/null; then
 fi
 success "Python 3: $(python3 --version 2>&1)"
 
-# discord.py 설치 확인 (채널 생성용)
-if ! python3 -c "import discord" &>/dev/null; then
-    warn "discord.py가 설치되어 있지 않습니다. 채널 자동 생성을 위해 설치합니다."
-    pip install discord.py --quiet 2>/dev/null || pip3 install discord.py --quiet 2>/dev/null
-    success "discord.py 설치 완료"
-fi
-
-# PyYAML 설치 확인 (config.yaml 수정용)
-if ! python3 -c "import yaml" &>/dev/null; then
-    warn "PyYAML이 설치되어 있지 않습니다. 설정 파일 수정을 위해 설치합니다."
-    pip install pyyaml --quiet 2>/dev/null || pip3 install pyyaml --quiet 2>/dev/null
-    success "PyYAML 설치 완료"
-fi
+# 채널 생성 스크립트는 표준 라이브러리만 사용하므로 추가 Python 패키지가 필요하지 않습니다.
+# (이전 버전의 discord.py / PyYAML 자동 설치 로직은 제거됨)
 
 # ── 사용자 입력 수집 ──────────────────────────────────────────────────────
 step 2 "설정 정보 입력"
@@ -1255,7 +1244,8 @@ success "agent-team 보드 활성화"
 # ── Worktree 기본 workdir 설정 ──────────────────────────────────────────────
 # 프로젝트 저장소 경로를 보드의 default_workdir로 설정
 # 이렇게 하면 worktree 태스크가 이 저장소 기준으로 격리됨
-PROJECT_REPO="${HOME}/Documents/hermes-discord-agent-team"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_REPO="${SCRIPT_DIR}"
 if [ -d "$PROJECT_REPO/.git" ]; then
     $HERMES_CMD kanban boards set-default-workdir agent-team "$PROJECT_REPO" 2>&1
     success "agent-team 보드 default_workdir → ${PROJECT_REPO}"
@@ -1473,7 +1463,7 @@ fi
 # ── Patch C — gateway/run.py: dispatcher 자동 구독 (notify_channels) ─────
 info "gateway/run.py Patch C (자동 구독) 적용 중..."
 
-if [ -f "$GATEWAY_RUN" ]; then
+if [ -f "$GATEWAY_RUN_PY" ]; then
     python3 << PATCHC
 import re, sys
 
@@ -1622,20 +1612,8 @@ else
     success "WAL 체크포인트 크론 등록: 5분마다 실행"
 fi
 
-# Hermes cron에도 no_agent=True로 등록 시도
-EXISTING_WAL_CRON=$($HERMES_CMD cron list 2>&1 | grep -i "wal-checkpoint" || true)
-if [ -n "$EXISTING_WAL_CRON" ]; then
-    info "Hermes WAL 체크포인트 cron 이미 존재 — 건너뜀"
-else
-    $HERMES_CMD cron create \
-        "*/5 * * * *" \
-        "Kanban WAL 체크포인트를 실행합니다. ${HERMES_HOME}/scripts/kanban-wal-checkpoint.sh 스크립트를 실행하여 모든 Kanban DB의 WAL 파일을 TRUNCATE합니다." \
-        --name "wal-checkpoint" \
-        --profile "ceo" \
-        --no-agent \
-        2>&1 || warn "Hermes WAL cron 생성 실패 (시스템 크론으로 대체됨)"
-    success "Hermes WAL 체크포인트 cron 등록 완료"
-fi
+# Hermes cron은 설치된 버전별 CLI 차이를 타기 쉬우므로 생략하고,
+# 아래 시스템 crontab만 사용한다.
 
 # ── Cron Jobs 설정 ─────────────────────────────────────────────────────────
 step 13 "자동화(Cron) 설정"
