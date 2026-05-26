@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ============================================================================
 #  Hermes Agent × Discord 멀티 에이전트 팀 원클릭 셋업 스크립트
-#  버전: 1.4.0
+#  버전: 1.5.0
 #  대상: Hermes Agent v0.14+ / Linux & macOS
 # ============================================================================
 #
@@ -28,6 +28,9 @@
 #         /    \
 #       Dev    QA
 #
+#  v1.5.0 변경사항:
+#    - 채널 생성 시 역할별 상세 안내 메시지 자동 게시
+#    - 채널 topic/생성 로그에 역할별 이모지 추가
 #  v1.4.0 변경사항:
 #    - CEO 워커 룰: 간단한 작업은 직접 수행, 복잡한 작업만 팀 위임
 #    - Discord 자동 구독: dispatcher spawn 시 assignee 채널에 notify_sub 자동 등록
@@ -84,7 +87,7 @@ PROFILES=("ceo" "cto" "pm" "swa" "devlead" "dev" "qa")
 cat << 'BANNER'
 ╔══════════════════════════════════════════════════════════════════════╗
 ║                                                                    ║
-║   🤖  Hermes Agent × Discord 멀티 에이전트 팀 셋업 v1.4.0        ║
+║   🤖  Hermes Agent × Discord 멀티 에이전트 팀 셋업 v1.5.0        ║
 ║                                                                    ║
 ║            CEO (퍼실리테이터 + 전략)                               ║
 ║           /   \                                                    ║
@@ -1065,6 +1068,59 @@ if not TOKEN or TOKEN.startswith("\$"):
 
 GUILD_ID = int("$GUILD_ID")
 
+CHANNEL_DEFS = {
+    "ceo-요청": {
+        "emoji": "👑",
+        "topic": "👑 CEO 요청 채널 — 사용자가 작업을 요청하고 CEO가 분석·분해·라우팅합니다",
+        "guide": """👑 **CEO 요청 채널**\n\n이 채널은 사용자가 AI 에이전트 팀에 작업을 요청하는 입구입니다.\n\n**CEO의 역할**\n- 사용자 요청을 목표/제약/완료 기준으로 정리합니다.\n- 간단한 작업은 직접 처리하고, 복잡한 작업은 팀에 위임합니다.\n- 필요한 경우 TFT를 열어 CTO/PM/SWA/DevLead/Dev/QA 의견을 모읍니다.\n- Kanban 태스크를 만들고 담당자·의존성·검수 흐름을 관리합니다.\n\n**사용자는 이렇게 요청하면 좋습니다**\n- 원하는 결과물, 대상 저장소/서비스, 우선순위, 마감/제약을 함께 적어주세요.\n\n**흐름**\n요청 접수 → CEO 분석 → TFT/작업분해 → 담당자 배정 → 진행 보고 → 최종 결과 공유""",
+    },
+    "작업현황": {
+        "emoji": "📊",
+        "topic": "📊 작업현황 — Kanban 진행 상황, 자동 알림, 스탠드업, 블로커 공유",
+        "guide": """📊 **작업현황 채널**\n\n이 채널은 전체 작업의 관제탑입니다.\n\n**주요 내용**\n- Kanban 태스크 생성/시작/완료/차단 알림\n- 데일리 스탠드업 및 정체 태스크 경고\n- PM·DevLead·QA의 진행/리스크/품질 상태 보고\n\n**보고 원칙**\n무엇이 완료됐는지, 다음 액션은 무엇인지, 누가 담당하는지, 어떤 검증을 했는지 명확히 적습니다.""",
+    },
+    "cto": {
+        "emoji": "🧭",
+        "topic": "🧭 CTO — 기술 전략, 아키텍처 방향, 기술 리스크와 트레이드오프 판단",
+        "guide": """🧭 **CTO 채널**\n\nCTO는 팀의 기술 방향과 주요 의사결정을 책임집니다.\n\n**담당 역할**\n- 기술 전략 및 스택 선택\n- 아키텍처 방향성과 핵심 트레이드오프 판단\n- 기술 리스크, 운영 비용, 확장성 검토\n- SWA·DevLead에게 기술 가이드 제공\n- 중요한 결정은 CEO에게 권고 또는 에스컬레이션""",
+    },
+    "pm": {
+        "emoji": "📅",
+        "topic": "📅 PM — 일정, 범위, 우선순위, 리소스, 위험 관리",
+        "guide": """📅 **PM 채널**\n\nPM은 프로젝트가 현실적인 범위와 일정 안에서 끝나도록 조율합니다.\n\n**담당 역할**\n- 일정·마일스톤·우선순위 수립\n- 범위 관리 및 리소스 배분\n- 리스크/블로커 추적\n- 진행 상황을 사용자 관점으로 정리\n- QA 결과와 릴리스 준비 상태 확인""",
+    },
+    "swa": {
+        "emoji": "🏗️",
+        "topic": "🏗️ SWA — 시스템 아키텍처, 인터페이스, 데이터 흐름 설계",
+        "guide": """🏗️ **SWA(System/Software Architect) 채널**\n\nSWA는 구현 전에 시스템 구조와 인터페이스를 명확히 합니다.\n\n**담당 역할**\n- 시스템 아키텍처 설계\n- 모듈 경계, API, 데이터 흐름 정의\n- CTO 전략을 실제 구조로 구체화\n- DevLead가 구현 가능한 설계로 변환할 수 있게 문서화""",
+    },
+    "devlead": {
+        "emoji": "🧑‍💻",
+        "topic": "🧑‍💻 DevLead — 구현 계획, 코드 리뷰, 개발 품질 기준, Dev/QA 조율",
+        "guide": """🧑‍💻 **DevLead 채널**\n\nDevLead는 설계를 실행 가능한 개발 작업으로 쪼개고 품질을 책임집니다.\n\n**담당 역할**\n- 구현 계획 수립 및 Dev에게 작업 할당\n- 코드 리뷰와 기술 품질 기준 관리\n- Dev와 QA 사이의 수정 루프 조율\n- 병목이 생기면 CEO/PM에게 즉시 공유""",
+    },
+    "dev": {
+        "emoji": "⚙️",
+        "topic": "⚙️ Dev — 코드 구현, 테스트, 버그 수정, 커밋 가능한 산출물 작성",
+        "guide": """⚙️ **Dev 채널**\n\nDev는 실제 코드를 작성하고 테스트로 검증합니다.\n\n**담당 역할**\n- 기능 구현 및 버그 수정\n- 로컬 테스트/타입체크/린트 등 기본 검증\n- 변경 파일과 테스트 결과를 명확히 보고\n- DevLead 리뷰 요청 및 QA 검수 대응""",
+    },
+    "qa": {
+        "emoji": "🧪",
+        "topic": "🧪 QA — 품질 검수, 재현 절차, 테스트 결과, 릴리스 게이트",
+        "guide": """🧪 **QA 채널**\n\nQA는 결과물이 사용자에게 전달 가능한지 검증하는 릴리스 게이트입니다.\n\n**담당 역할**\n- 요구사항 기준 검수\n- 기능/회귀/엣지케이스 테스트\n- 버그 재현 절차와 기대/실제 결과 작성\n- 통과(APPROVE) 또는 변경 요청(REQUEST CHANGES) 판단""",
+    },
+    "tft-토론": {
+        "emoji": "🤝",
+        "topic": "🤝 TFT 토론 — 역할 간 의사결정, 킥오프, 아키텍처/일정/품질 합의",
+        "guide": """🤝 **TFT(Task Force Team) 토론 채널**\n\n복잡한 작업에서 여러 역할의 판단이 필요할 때 사용하는 회의실입니다.\n\n**언제 사용하나**\n- 프로젝트 킥오프: CTO + PM + SWA\n- 아키텍처 결정: CTO + SWA + DevLead\n- 일정/품질 트레이드오프: CTO + PM + DevLead\n- 디자인/개발 핸드오프: SWA + DevLead + Dev\n- 품질 기준 논의: DevLead + QA + PM\n\n**토론 형식**\n📌 토론 주제 / 👥 참석자 / 🎯 목표 / ⏱️ 제한 / ✅ 결론 / 🔜 액션 아이템""",
+    },
+    "최종결과": {
+        "emoji": "✅",
+        "topic": "✅ 최종결과 — 사용자에게 전달할 완료 산출물, 검증 결과, 배포/운영 안내",
+        "guide": """✅ **최종결과 채널**\n\n완료된 산출물과 사용자에게 전달할 최종 보고가 모이는 채널입니다.\n\n**포함해야 할 내용**\n- 최종 결과 요약\n- 변경/구현/작성된 산출물 위치\n- 테스트 및 검증 결과\n- 배포 여부와 접속/사용 방법\n- 남은 리스크나 후속 권장 작업""",
+    },
+}
+
 intents = discord.Intents.default()
 intents.guilds = True
 
@@ -1090,18 +1146,7 @@ async def create_channels():
             print(f"# Created category: AGENT-TEAM", flush=True)
 
         # 7역할 + 공용 채널 생성
-        channels = {
-            "ceo-요청": None,
-            "작업현황": None,
-            "cto": None,
-            "pm": None,
-            "swa": None,
-            "devlead": None,
-            "dev": None,
-            "qa": None,
-            "tft-토론": None,
-            "최종결과": None,
-        }
+        channels = {name: None for name in CHANNEL_DEFS}
 
         for existing_ch in guild.channels:
             if hasattr(existing_ch, 'category') and existing_ch.category == category:
@@ -1109,12 +1154,14 @@ async def create_channels():
                     channels[existing_ch.name] = existing_ch.id
 
         for name, ch_id in channels.items():
+            spec = CHANNEL_DEFS[name]
             if ch_id is None:
-                ch = await guild.create_text_channel(name, category=category)
+                ch = await guild.create_text_channel(name, category=category, topic=spec["topic"])
                 channels[name] = ch.id
-                print(f"# Created: #{name} ({ch.id})", flush=True)
+                await ch.send(spec["guide"], allowed_mentions=discord.AllowedMentions.none())
+                print(f"# Created: {spec['emoji']} #{name} ({ch.id}) + guide", flush=True)
             else:
-                print(f"# Exists:  #{name} ({ch_id})", flush=True)
+                print(f"# Exists:  {spec['emoji']} #{name} ({ch_id})", flush=True)
 
         print(json.dumps(channels), flush=True)
         await bot.close()
